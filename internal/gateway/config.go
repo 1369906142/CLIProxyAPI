@@ -10,37 +10,37 @@ import (
 )
 
 type Config struct {
-	Listen   string             `yaml:"listen"`
-	Backend  BackendConfig      `yaml:"backend"`
-	Redis    config.RedisConfig `yaml:"redis"`
-	Tenants  []TenantConfig     `yaml:"tenants"`
-	Timeouts TimeoutConfig      `yaml:"timeouts"`
+	Listen   string             `yaml:"listen" json:"listen"`
+	Backend  BackendConfig      `yaml:"backend" json:"backend"`
+	Redis    config.RedisConfig `yaml:"redis" json:"redis"`
+	Tenants  []TenantConfig     `yaml:"tenants" json:"tenants"`
+	Timeouts TimeoutConfig      `yaml:"timeouts" json:"timeouts"`
 }
 
 type BackendConfig struct {
-	URL            string `yaml:"url"`
-	InternalAPIKey string `yaml:"internal-api-key"`
+	URL            string `yaml:"url" json:"url"`
+	InternalAPIKey string `yaml:"internal-api-key" json:"internal-api-key"`
 }
 
 type TenantConfig struct {
-	ID        string      `yaml:"id"`
-	APIKey    string      `yaml:"api-key"`
-	QPS       float64     `yaml:"qps"`
-	Burst     int         `yaml:"burst"`
-	TimeoutMS int         `yaml:"timeout-ms"`
-	ProxyPool string      `yaml:"proxy-pool"`
-	Retry     RetryConfig `yaml:"retry"`
+	ID        string      `yaml:"id" json:"id"`
+	APIKey    string      `yaml:"api-key" json:"api-key"`
+	QPS       float64     `yaml:"qps" json:"qps"`
+	Burst     int         `yaml:"burst" json:"burst"`
+	TimeoutMS int         `yaml:"timeout-ms" json:"timeout-ms"`
+	ProxyPool string      `yaml:"proxy-pool" json:"proxy-pool"`
+	Retry     RetryConfig `yaml:"retry" json:"retry"`
 }
 
 type RetryConfig struct {
-	MaxAttempts int `yaml:"max-attempts"`
+	MaxAttempts int `yaml:"max-attempts" json:"max-attempts"`
 }
 
 type TimeoutConfig struct {
-	ConnectMS        int `yaml:"connect-ms"`
-	ResponseHeaderMS int `yaml:"response-header-ms"`
-	TotalMS          int `yaml:"total-ms"`
-	StreamIdleMS     int `yaml:"stream-idle-ms"`
+	ConnectMS        int `yaml:"connect-ms" json:"connect-ms"`
+	ResponseHeaderMS int `yaml:"response-header-ms" json:"response-header-ms"`
+	TotalMS          int `yaml:"total-ms" json:"total-ms"`
+	StreamIdleMS     int `yaml:"stream-idle-ms" json:"stream-idle-ms"`
 }
 
 func LoadConfig(path string) (*Config, error) {

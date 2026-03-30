@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLIProxyAPI Control Center</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --card: rgba(255, 251, 243, 0.92);
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: rgba(31, 41, 51, 0.12);
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --danger: #b42318;
+      --shadow: 0 24px 60px rgba(20, 24, 28, 0.12);
+      --radius: 22px;
+      --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15,118,110,0.14), transparent 32%),
+        radial-gradient(circle at top right, rgba(180,35,24,0.10), transparent 24%),
+        linear-gradient(180deg, #faf7f2 0%, #f2efe8 100%);
+      min-height: 100vh;
+    }
+    .shell {
+      width: min(1440px, calc(100% - 32px));
+      margin: 24px auto 48px;
+    }
+    .hero {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1.3fr 0.9fr;
+      align-items: stretch;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+    .hero-main {
+      padding: 28px;
+      min-height: 240px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -100px auto;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(15,118,110,0.18), transparent 68%);
+      pointer-events: none;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      font-size: clamp(32px, 4vw, 52px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+      max-width: 12ch;
+    }
+    .lede {
+      margin-top: 16px;
+      color: var(--muted);
+      max-width: 54ch;
+      line-height: 1.65;
+    }
+    .hero-actions, .toolbar, .row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .hero-actions { margin-top: 20px; }
+    button, .button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    button:hover, .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 30px rgba(17, 94, 89, 0.18);
+    }
+    button.primary, .button.primary {
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    }
+    button.secondary, .button.secondary {
+      color: var(--ink);
+      background: rgba(15,118,110,0.08);
+    }
+    button.ghost, .button.ghost {
+      color: var(--muted);
+      background: rgba(255,255,255,0.65);
+      border: 1px solid var(--line);
+    }
+    button.danger {
+      color: white;
+      background: linear-gradient(135deg, #d92d20, #b42318);
+    }
+    .hero-side {
+      padding: 24px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .mini-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .mini-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.64);
+    }
+    .mini-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .mini-card strong {
+      font-size: 20px;
+      line-height: 1.2;
+    }
+    .auth-bar, .content-grid {
+      margin-top: 18px;
+      display: grid;
+      gap: 18px;
+    }
+    .auth-bar {
+      padding: 18px 20px;
+      grid-template-columns: minmax(0, 1.4fr) auto auto;
+      align-items: end;
+    }
+    .content-grid {
+      grid-template-columns: 1.2fr 1fr;
+      align-items: start;
+    }
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+    .section {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+    }
+    .section-head p {
+      color: var(--muted);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .field-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .field-grid.compact {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    input, select, textarea {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid rgba(31,41,51,0.14);
+      background: rgba(255,255,255,0.86);
+      color: var(--ink);
+      padding: 12px 14px;
+      font: inherit;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(15,118,110,0.48);
+      box-shadow: 0 0 0 4px rgba(15,118,110,0.12);
+    }
+    textarea {
+      min-height: 128px;
+      resize: vertical;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .yaml textarea { min-height: 300px; }
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+    .checkbox input {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(31,41,51,0.08);
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.7);
+    }
+    .table-wrap input, .table-wrap textarea, .table-wrap select {
+      min-width: 120px;
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    .table-wrap textarea {
+      min-height: 68px;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .status strong { color: var(--ink); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: rgba(15,118,110,0.08);
+      border-radius: 999px;
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .danger-text { color: var(--danger); }
+    .hidden { display: none !important; }
+    @media (max-width: 1180px) {
+      .hero, .content-grid { grid-template-columns: 1fr; }
+      .field-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 20px, 100%); }
+      .hero-main, .hero-side, .section, .auth-bar { padding: 18px; }
+      .auth-bar, .field-grid, .field-grid.compact { grid-template-columns: 1fr; }
+      .mini-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="panel hero-main">
+        <span class="pill">Commercial Gateway Console</span>
+        <h1>让新网关能力直接出现在 WebUI</h1>
+        <p class="lede">这个内置面板优先暴露本次商用改造新增的配置能力，包含 Redis 共享状态、代理池、网关租户与原始 YAML 编辑。旧版远程面板仍然保留，方便继续使用熟悉的功能。</p>
+        <div class="hero-actions">
+          <button class="primary" id="reloadAll">重新加载全部配置</button>
+          <a class="button secondary" href="/management-classic.html" target="_blank" rel="noreferrer">打开经典面板</a>
+          <button class="ghost" id="loadYaml">刷新 YAML</button>
+        </div>
+      </div>
+      <aside class="panel hero-side">
+        <div class="mini-grid">
+          <div class="mini-card"><span>Redis</span><strong id="statRedis">-</strong></div>
+          <div class="mini-card"><span>Proxy Pools</span><strong id="statProxyPools">0</strong></div>
+          <div class="mini-card"><span>Gateway</span><strong id="statGateway">未检测</strong></div>
+          <div class="mini-card"><span>Tenants</span><strong id="statTenants">0</strong></div>
+        </div>
+        <div class="status"><strong>Latest Release</strong><span id="latestVersion">loading...</span></div>
+        <div class="status"><strong>Status</strong><span id="pageStatus">等待加载</span></div>
+      </aside>
+    </section>
+
+    <section class="panel auth-bar">
+      <label>
+        管理密钥
+        <input id="mgmtKey" type="password" placeholder="输入 MANAGEMENT_PASSWORD 或 secret-key 明文">
+      </label>
+      <button class="secondary" id="saveKey">保存密钥</button>
+      <button class="ghost" id="clearKey">清除本地密钥</button>
+    </section>
+
+    <section class="content-grid">
+      <div class="stack">
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>CLIProxyAPI 商用配置</h2>
+              <p>这里直接编辑本次新增的共享状态与代理池配置，并保留与流控相关的核心开关。</p>
+            </div>
+            <div class="row-actions">
+              <button class="primary" id="saveCommercial">保存 CLI 商用配置</button>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <label>全局代理 URL
+              <input id="proxyUrl" placeholder="http://127.0.0.1:7890">
+            </label>
+            <label>路由策略
+              <select id="routingStrategy">
+                <option value="round-robin">round-robin</option>
+                <option value="fill-first">fill-first</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-grid compact">
+            <label>请求重试次数
+              <input id="requestRetry" type="number" min="0">
+            </label>
+            <label>最大重试间隔(秒)
+              <input id="maxRetryInterval" type="number" min="0">
+            </label>
+            <label>Redis DB
+              <input id="redisDb" type="number" min="0">
+            </label>
+            <label>冷却禁用
+              <span class="checkbox"><input id="disableCooling" type="checkbox">停用 key cooldown</span>
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>Redis Addr
+              <input id="redisAddr" placeholder="127.0.0.1:6379">
+            </label>
+            <label>Redis Key Prefix
+              <input id="redisPrefix" placeholder="cpa:prod">
+            </label>
+          </div>
+
+          <label>Redis Password
+            <input id="redisPassword" type="password" placeholder="留空表示无密码">
+          </label>
+
+          <div class="section-head">
+            <div>
+              <h3>代理池</h3>
+              <p>支持多池、多代理地址、失败熔断与冷却恢复。`urls` 可一行一个。</p>
+            </div>
+            <button class="secondary" id="addProxyPool">新增代理池</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Primary URL</th>
+                  <th>URLs</th>
+                  <th>Weight</th>
+                  <th>Max Failures</th>
+                  <th>Cooldown</th>
+                  <th>Mode</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="proxyPoolBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel section" id="gatewayPanel">
+          <div class="section-head">
+            <div>
+              <h2>Gateway 配置</h2>
+              <p>检测到网关配置文件后，这里可以直接管理外部入口、后端地址、租户限流和代理池指派。</p>
+            </div>
+            <div class="row-actions">
+              <button class="ghost" id="reloadGateway">重载网关配置</button>
+              <button class="primary" id="saveGateway">保存 Gateway 配置</button>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <label>监听地址
+              <input id="gatewayListen" placeholder=":8320">
+            </label>
+            <label>后端 URL
+              <input id="gatewayBackendUrl" placeholder="http://127.0.0.1:8315">
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>内部 API Key
+              <input id="gatewayInternalKey" type="password" placeholder="gateway -> backend 内部鉴权">
+            </label>
+            <label>Gateway Redis Addr
+              <input id="gatewayRedisAddr" placeholder="127.0.0.1:6379">
+            </label>
+          </div>
+
+          <div class="field-grid compact">
+            <label>Gateway Redis DB
+              <input id="gatewayRedisDb" type="number" min="0">
+            </label>
+            <label>Redis Key Prefix
+              <input id="gatewayRedisPrefix" placeholder="cpa:gateway">
+            </label>
+            <label>Connect Timeout(ms)
+              <input id="gatewayConnectMs" type="number" min="1">
+            </label>
+            <label>Header Timeout(ms)
+              <input id="gatewayHeaderMs" type="number" min="1">
+            </label>
+          </div>
+
+          <div class="field-grid compact">
+            <label>Total Timeout(ms)
+              <input id="gatewayTotalMs" type="number" min="1">
+            </label>
+            <label>Stream Idle(ms)
+              <input id="gatewayStreamIdleMs" type="number" min="1">
+            </label>
+          </div>
+
+          <div class="section-head">
+            <div>
+              <h3>租户列表</h3>
+              <p>支持每租户独立 API Key、QPS/Burst、超时、重试和默认代理池。</p>
+            </div>
+            <button class="secondary" id="addTenant">新增租户</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>API Key</th>
+                  <th>QPS</th>
+                  <th>Burst</th>
+                  <th>Timeout</th>
+                  <th>Proxy Pool</th>
+                  <th>Retry Attempts</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="tenantBody"></tbody>
+            </table>
+          </div>
+
+          <p class="hint hidden" id="gatewayMissing">当前未检测到网关配置文件。可在和 `config.yaml` 同目录创建 `gateway.yaml` / `gateway.example.yaml`，或设置环境变量 `CPA_GATEWAY_CONFIG_PATH`。</p>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel section yaml">
+          <div class="section-head">
+            <div>
+              <h2>CLIProxyAPI YAML</h2>
+              <p>原始 YAML 直接来自当前运行实例对应的配置文件，适合做最终校验或进行高级编辑。</p>
+            </div>
+            <button class="primary" id="saveCliYaml">保存 CLI YAML</button>
+          </div>
+          <textarea id="cliYaml" spellcheck="false"></textarea>
+        </section>
+
+        <section class="panel section yaml">
+          <div class="section-head">
+            <div>
+              <h2>Gateway YAML</h2>
+              <p>如果网关配置可用，这里会提供完整原始 YAML 编辑能力。</p>
+            </div>
+            <button class="primary" id="saveGatewayYaml">保存 Gateway YAML</button>
+          </div>
+          <textarea id="gatewayYaml" spellcheck="false"></textarea>
+          <p class="hint" id="gatewayYamlHint">未检测到网关配置时，此区域会保持只读占位。</p>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const qs = (id) => document.getElementById(id);
+    const els = {
+      status: qs('pageStatus'),
+      latestVersion: qs('latestVersion'),
+      mgmtKey: qs('mgmtKey'),
+      cliYaml: qs('cliYaml'),
+      gatewayYaml: qs('gatewayYaml'),
+      gatewayYamlHint: qs('gatewayYamlHint'),
+      gatewayMissing: qs('gatewayMissing'),
+      proxyPoolBody: qs('proxyPoolBody'),
+      tenantBody: qs('tenantBody')
+    };
+
+    function setStatus(message, isError = false) {
+      els.status.textContent = message;
+      els.status.classList.toggle('danger-text', isError);
+    }
+    function getKey() {
+      return localStorage.getItem('cpa-management-key') || '';
+    }
+    function setKey(value) {
+      localStorage.setItem('cpa-management-key', value);
+      els.mgmtKey.value = value;
+    }
+    async function api(path, options = {}) {
+      const headers = new Headers(options.headers || {});
+      const key = getKey();
+      if (key) headers.set('Authorization', `Bearer ${key}`);
+      if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+      const response = await fetch(path, { ...options, headers });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`);
+      return response;
+    }
+    function splitLines(value) {
+      return String(value || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+    }
+    function joinLines(items) {
+      return (items || []).join('\n');
+    }
+    function escapeHtml(value) {
+      return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+    }
+    function proxyPoolRow(pool = {}) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input data-field="id" value="${escapeHtml(pool.id || '')}"></td>
+        <td><input data-field="url" value="${escapeHtml(pool.url || '')}"></td>
+        <td><textarea data-field="urls">${escapeHtml(joinLines(pool.urls || []))}</textarea></td>
+        <td><input data-field="weight" type="number" min="0" value="${escapeHtml(String(pool.weight ?? 1))}"></td>
+        <td><input data-field="max-failures" type="number" min="0" value="${escapeHtml(String(pool['max-failures'] ?? pool.maxFailures ?? 3))}"></td>
+        <td><input data-field="cooldown-seconds" type="number" min="0" value="${escapeHtml(String(pool['cooldown-seconds'] ?? pool.cooldownSeconds ?? 60))}"></td>
+        <td><select data-field="mode"><option value="weighted">weighted</option><option value="random">random</option><option value="failover">failover</option></select></td>
+        <td><button class="danger" type="button">删除</button></td>
+      `;
+      tr.querySelector('[data-field="mode"]').value = pool.mode || 'weighted';
+      tr.querySelector('button').addEventListener('click', () => tr.remove());
+      return tr;
+    }
+    function tenantRow(tenant = {}) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input data-field="id" value="${escapeHtml(tenant.id || '')}"></td>
+        <td><input data-field="api-key" value="${escapeHtml(tenant['api-key'] || tenant.apiKey || '')}"></td>
+        <td><input data-field="qps" type="number" min="0" step="0.1" value="${escapeHtml(String(tenant.qps ?? 1))}"></td>
+        <td><input data-field="burst" type="number" min="1" value="${escapeHtml(String(tenant.burst ?? 1))}"></td>
+        <td><input data-field="timeout-ms" type="number" min="1" value="${escapeHtml(String(tenant['timeout-ms'] ?? tenant.timeoutMS ?? 120000))}"></td>
+        <td><input data-field="proxy-pool" value="${escapeHtml(tenant['proxy-pool'] || tenant.proxyPool || '')}"></td>
+        <td><input data-field="retry-max-attempts" type="number" min="1" value="${escapeHtml(String((tenant.retry && (tenant.retry['max-attempts'] ?? tenant.retry.maxAttempts)) ?? 3))}"></td>
+        <td><button class="danger" type="button">删除</button></td>
+      `;
+      tr.querySelector('button').addEventListener('click', () => tr.remove());
+      return tr;
+    }
+    function collectProxyPools() {
+      return [...els.proxyPoolBody.querySelectorAll('tr')].map((tr) => {
+        const read = (field) => tr.querySelector(`[data-field="${field}"]`).value.trim();
+        return {
+          id: read('id'),
+          url: read('url'),
+          urls: splitLines(read('urls')),
+          weight: Number(read('weight') || 0),
+          'max-failures': Number(read('max-failures') || 0),
+          'cooldown-seconds': Number(read('cooldown-seconds') || 0),
+          mode: read('mode')
+        };
+      }).filter((pool) => pool.id || pool.url || pool.urls.length);
+    }
+    function collectTenants() {
+      return [...els.tenantBody.querySelectorAll('tr')].map((tr) => {
+        const read = (field) => tr.querySelector(`[data-field="${field}"]`).value.trim();
+        return {
+          id: read('id'),
+          'api-key': read('api-key'),
+          qps: Number(read('qps') || 0),
+          burst: Number(read('burst') || 0),
+          'timeout-ms': Number(read('timeout-ms') || 0),
+          'proxy-pool': read('proxy-pool'),
+          retry: { 'max-attempts': Number(read('retry-max-attempts') || 0) }
+        };
+      }).filter((tenant) => tenant.id || tenant['api-key']);
+    }
+    function fillCommercial(data) {
+      qs('proxyUrl').value = data['proxy-url'] || '';
+      qs('routingStrategy').value = data.routing?.strategy || 'round-robin';
+      qs('requestRetry').value = data['request-retry'] ?? 0;
+      qs('maxRetryInterval').value = data['max-retry-interval'] ?? 0;
+      qs('disableCooling').checked = Boolean(data['disable-cooling']);
+      qs('redisAddr').value = data.redis?.addr || '';
+      qs('redisPassword').value = data.redis?.password || '';
+      qs('redisDb').value = data.redis?.db ?? 0;
+      qs('redisPrefix').value = data.redis?.['key-prefix'] || data.redis?.keyPrefix || '';
+      els.proxyPoolBody.innerHTML = '';
+      const pools = data.transport?.['proxy-pools'] || data.transport?.proxyPools || [];
+      pools.forEach((pool) => els.proxyPoolBody.appendChild(proxyPoolRow(pool)));
+      qs('statRedis').textContent = data.redis?.addr || '未配置';
+      qs('statProxyPools').textContent = String(pools.length);
+    }
+    function fillGateway(data) {
+      qs('gatewayListen').value = data.listen || '';
+      qs('gatewayBackendUrl').value = data.backend?.url || '';
+      qs('gatewayInternalKey').value = data.backend?.['internal-api-key'] || data.backend?.internalAPIKey || '';
+      qs('gatewayRedisAddr').value = data.redis?.addr || '';
+      qs('gatewayRedisDb').value = data.redis?.db ?? 0;
+      qs('gatewayRedisPrefix').value = data.redis?.['key-prefix'] || data.redis?.keyPrefix || '';
+      qs('gatewayConnectMs').value = data.timeouts?.['connect-ms'] ?? data.timeouts?.connectMS ?? 5000;
+      qs('gatewayHeaderMs').value = data.timeouts?.['response-header-ms'] ?? data.timeouts?.responseHeaderMS ?? 30000;
+      qs('gatewayTotalMs').value = data.timeouts?.['total-ms'] ?? data.timeouts?.totalMS ?? 120000;
+      qs('gatewayStreamIdleMs').value = data.timeouts?.['stream-idle-ms'] ?? data.timeouts?.streamIdleMS ?? 45000;
+      els.tenantBody.innerHTML = '';
+      (data.tenants || []).forEach((tenant) => els.tenantBody.appendChild(tenantRow(tenant)));
+      qs('statGateway').textContent = data.listen || '可编辑';
+      qs('statTenants').textContent = String((data.tenants || []).length);
+      els.gatewayMissing.classList.add('hidden');
+      els.gatewayYaml.disabled = false;
+      els.gatewayYamlHint.textContent = '检测到可编辑的网关配置文件。';
+    }
+    function showGatewayMissing(message) {
+      els.tenantBody.innerHTML = '';
+      qs('statGateway').textContent = '未检测';
+      qs('statTenants').textContent = '0';
+      els.gatewayMissing.textContent = message;
+      els.gatewayMissing.classList.remove('hidden');
+      els.gatewayYaml.value = '';
+      els.gatewayYaml.disabled = true;
+      els.gatewayYamlHint.textContent = message;
+    }
+    async function loadCommercial() {
+      fillCommercial(await api('/v0/management/commercial/config').then((r) => r.json()));
+    }
+    async function loadGateway() {
+      try {
+        fillGateway(await api('/v0/management/gateway/config').then((r) => r.json()));
+      } catch (_) {
+        showGatewayMissing('当前未检测到可用的网关配置文件。可创建 gateway.yaml，或设置 CPA_GATEWAY_CONFIG_PATH。');
+      }
+    }
+    async function loadYamlEditors() {
+      els.cliYaml.value = await api('/v0/management/config.yaml').then((r) => r.text());
+      try {
+        els.gatewayYaml.value = await api('/v0/management/gateway/config.yaml').then((r) => r.text());
+        els.gatewayYaml.disabled = false;
+        els.gatewayYamlHint.textContent = '可直接编辑并保存网关 YAML。';
+      } catch (_) {
+        showGatewayMissing('当前未检测到可用的网关配置文件。可创建 gateway.yaml，或设置 CPA_GATEWAY_CONFIG_PATH。');
+      }
+    }
+    async function loadVersion() {
+      try {
+        const payload = await api('/v0/management/latest-version').then((r) => r.json());
+        els.latestVersion.textContent = payload['latest-version'] || 'unknown';
+      } catch (_) {
+        els.latestVersion.textContent = 'failed';
+      }
+    }
+    async function reloadAll() {
+      setStatus('正在加载配置...');
+      try {
+        await Promise.all([loadCommercial(), loadGateway(), loadYamlEditors(), loadVersion()]);
+        setStatus('配置已加载');
+      } catch (error) {
+        console.error(error);
+        setStatus(`加载失败: ${error.message}`, true);
+      }
+    }
+    async function saveCommercial() {
+      const payload = {
+        'proxy-url': qs('proxyUrl').value.trim(),
+        'request-retry': Number(qs('requestRetry').value || 0),
+        'max-retry-interval': Number(qs('maxRetryInterval').value || 0),
+        'disable-cooling': qs('disableCooling').checked,
+        routing: { strategy: qs('routingStrategy').value },
+        redis: {
+          addr: qs('redisAddr').value.trim(),
+          password: qs('redisPassword').value,
+          db: Number(qs('redisDb').value || 0),
+          'key-prefix': qs('redisPrefix').value.trim()
+        },
+        transport: { 'proxy-pools': collectProxyPools() }
+      };
+      setStatus('正在保存 CLI 商用配置...');
+      try {
+        await api('/v0/management/commercial/config', { method: 'PUT', body: JSON.stringify(payload) });
+        await loadCommercial();
+        await loadYamlEditors();
+        setStatus('CLI 商用配置已保存');
+      } catch (error) {
+        console.error(error);
+        setStatus(`CLI 配置保存失败: ${error.message}`, true);
+      }
+    }
+    async function saveGateway() {
+      const payload = {
+        listen: qs('gatewayListen').value.trim(),
+        backend: {
+          url: qs('gatewayBackendUrl').value.trim(),
+          'internal-api-key': qs('gatewayInternalKey').value
+        },
+        redis: {
+          addr: qs('gatewayRedisAddr').value.trim(),
+          db: Number(qs('gatewayRedisDb').value || 0),
+          'key-prefix': qs('gatewayRedisPrefix').value.trim()
+        },
+        timeouts: {
+          'connect-ms': Number(qs('gatewayConnectMs').value || 0),
+          'response-header-ms': Number(qs('gatewayHeaderMs').value || 0),
+          'total-ms': Number(qs('gatewayTotalMs').value || 0),
+          'stream-idle-ms': Number(qs('gatewayStreamIdleMs').value || 0)
+        },
+        tenants: collectTenants()
+      };
+      setStatus('正在保存 Gateway 配置...');
+      try {
+        await api('/v0/management/gateway/config', { method: 'PUT', body: JSON.stringify(payload) });
+        await loadGateway();
+        await loadYamlEditors();
+        setStatus('Gateway 配置已保存');
+      } catch (error) {
+        console.error(error);
+        setStatus(`Gateway 保存失败: ${error.message}`, true);
+      }
+    }
+    async function saveCliYaml() {
+      setStatus('正在保存 CLI YAML...');
+      try {
+        await api('/v0/management/config.yaml', { method: 'PUT', headers: { 'Content-Type': 'application/yaml' }, body: els.cliYaml.value });
+        await loadCommercial();
+        setStatus('CLI YAML 已保存');
+      } catch (error) {
+        console.error(error);
+        setStatus(`CLI YAML 保存失败: ${error.message}`, true);
+      }
+    }
+    async function saveGatewayYaml() {
+      if (els.gatewayYaml.disabled) {
+        setStatus('当前没有可保存的 gateway YAML', true);
+        return;
+      }
+      setStatus('正在保存 Gateway YAML...');
+      try {
+        await api('/v0/management/gateway/config.yaml', { method: 'PUT', headers: { 'Content-Type': 'application/yaml' }, body: els.gatewayYaml.value });
+        await loadGateway();
+        setStatus('Gateway YAML 已保存');
+      } catch (error) {
+        console.error(error);
+        setStatus(`Gateway YAML 保存失败: ${error.message}`, true);
+      }
+    }
+    qs('reloadAll').addEventListener('click', reloadAll);
+    qs('loadYaml').addEventListener('click', loadYamlEditors);
+    qs('saveCommercial').addEventListener('click', saveCommercial);
+    qs('saveGateway').addEventListener('click', saveGateway);
+    qs('saveCliYaml').addEventListener('click', saveCliYaml);
+    qs('saveGatewayYaml').addEventListener('click', saveGatewayYaml);
+    qs('reloadGateway').addEventListener('click', loadGateway);
+    qs('addProxyPool').addEventListener('click', () => els.proxyPoolBody.appendChild(proxyPoolRow()));
+    qs('addTenant').addEventListener('click', () => els.tenantBody.appendChild(tenantRow()));
+    qs('saveKey').addEventListener('click', () => {
+      setKey(els.mgmtKey.value.trim());
+      setStatus('管理密钥已保存到浏览器本地存储');
+    });
+    qs('clearKey').addEventListener('click', () => {
+      localStorage.removeItem('cpa-management-key');
+      els.mgmtKey.value = '';
+      setStatus('本地管理密钥已清除');
+    });
+    setKey(getKey());
+    reloadAll();
+  </script>
+</body>
+</html>
