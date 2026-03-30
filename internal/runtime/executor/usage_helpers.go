@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/requestctx"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	"github.com/tidwall/gjson"
@@ -16,6 +17,7 @@ import (
 )
 
 type usageReporter struct {
+	tenantID    string
 	provider    string
 	model       string
 	authID      string
@@ -29,6 +31,7 @@ type usageReporter struct {
 func newUsageReporter(ctx context.Context, provider, model string, auth *cliproxyauth.Auth) *usageReporter {
 	apiKey := apiKeyFromContext(ctx)
 	reporter := &usageReporter{
+		tenantID:    tenantIDFromContext(ctx),
 		provider:    provider,
 		model:       model,
 		requestedAt: time.Now(),
@@ -95,6 +98,7 @@ func (r *usageReporter) buildRecord(detail usage.Detail, failed bool) usage.Reco
 		return usage.Record{Detail: detail, Failed: failed}
 	}
 	return usage.Record{
+		TenantID:    r.tenantID,
 		Provider:    r.provider,
 		Model:       r.model,
 		Source:      r.source,
@@ -106,6 +110,11 @@ func (r *usageReporter) buildRecord(detail usage.Detail, failed bool) usage.Reco
 		Failed:      failed,
 		Detail:      detail,
 	}
+}
+
+func tenantIDFromContext(ctx context.Context) string {
+	metadata := requestctx.MetadataFromContext(ctx)
+	return requestctx.MetadataString(metadata, requestctx.MetadataTenantID)
 }
 
 func (r *usageReporter) latency() time.Duration {

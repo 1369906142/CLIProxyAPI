@@ -4,11 +4,16 @@
 package cliproxy
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	configaccess "github.com/router-for-me/CLIProxyAPI/v6/internal/access/config_access"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/cliproxystate"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/redisstate"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/runtime/executor"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v6/sdk/access"
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v6/sdk/auth"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
@@ -200,6 +205,17 @@ func (b *Builder) Build() (*Service, error) {
 	configaccess.Register(&b.cfg.SDKConfig)
 	accessManager.SetProviders(sdkaccess.RegisteredProviders())
 
+	var stateStore *redisstate.Store
+	if strings.TrimSpace(b.cfg.Redis.Addr) != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var errState error
+		stateStore, errState = redisstate.New(ctx, b.cfg.Redis)
+		if errState != nil {
+			return nil, errState
+		}
+	}
+
 	coreManager := b.coreManager
 	if coreManager == nil {
 		tokenStore := sdkAuth.GetTokenStore()
@@ -219,12 +235,14 @@ func (b *Builder) Build() (*Service, error) {
 			selector = &coreauth.RoundRobinSelector{}
 		}
 
-		coreManager = coreauth.NewManager(tokenStore, selector, nil)
+		coreManager = coreauth.NewManager(tokenStore, selector, cliproxystate.NewHook(stateStore))
 	}
 	// Attach a default RoundTripper provider so providers can opt-in per-auth transports.
 	coreManager.SetRoundTripperProvider(newDefaultRoundTripperProvider())
+	coreManager.SetQuotaLimiter(cliproxystate.NewQuotaLimiter(stateStore))
 	coreManager.SetConfig(b.cfg)
 	coreManager.SetOAuthModelAlias(b.cfg.OAuthModelAlias)
+	executor.ConfigureTransportRuntime(b.cfg, stateStore)
 
 	service := &Service{
 		cfg:            b.cfg,
@@ -237,6 +255,7 @@ func (b *Builder) Build() (*Service, error) {
 		accessManager:  accessManager,
 		coreManager:    coreManager,
 		serverOptions:  append([]api.ServerOption(nil), b.serverOptions...),
+		stateStore:     stateStore,
 	}
 	return service, nil
 }

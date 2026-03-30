@@ -70,6 +70,32 @@ usage-statistics-enabled: false
 # Per-entry proxy-url also supports "direct" or "none" to bypass both the global proxy-url and environment proxies explicitly.
 proxy-url: ""
 
+# Redis-backed shared runtime state. Required when you deploy the public gateway and
+# multiple CLIProxyAPI instances, because rate limits, auth quotas, usage metrics,
+# and proxy health all synchronize through Redis.
+# redis:
+#   addr: "127.0.0.1:6379"
+#   password: ""
+#   db: 0
+#   key-prefix: "cpa"
+
+# Advanced transport settings for request-level proxy pool routing.
+# Multiple entries may share the same id to form a weighted pool.
+# transport:
+#   proxy-pools:
+#     - id: "residential-us"
+#       url: "socks5://user:pass@proxy-a.example.com:1080"
+#       weight: 5
+#       max-failures: 3
+#       cooldown-seconds: 60
+#       mode: "sticky"
+#     - id: "residential-us"
+#       url: "http://user:pass@proxy-b.example.com:8080"
+#       weight: 2
+#       max-failures: 3
+#       cooldown-seconds: 60
+#       mode: "fallback"
+
 # When true, unprefixed model requests only use credentials without a prefix (except when prefix == model name).
 force-model-prefix: false
 
@@ -116,6 +142,10 @@ nonstream-keepalive-interval: 0
 #       X-Custom-Header: "custom-value"
 #     proxy-url: "socks5://proxy.example.com:1080"
 #     # proxy-url: "direct" # optional: explicit direct connect for this credential
+#     limits:
+#       per-minute: 120
+#       per-day: 5000
+#       concurrent: 8
 #     models:
 #       - name: "gemini-2.5-flash" # upstream model name
 #         alias: "gemini-flash"    # client alias mapped to the upstream model
@@ -135,6 +165,10 @@ nonstream-keepalive-interval: 0
 #       X-Custom-Header: "custom-value"
 #     proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
 #     # proxy-url: "direct" # optional: explicit direct connect for this credential
+#     limits:
+#       per-minute: 60
+#       per-day: 2000
+#       concurrent: 4
 #     models:
 #       - name: "gpt-5-codex"   # upstream model name
 #         alias: "codex-latest" # client alias mapped to the upstream model
@@ -154,6 +188,10 @@ nonstream-keepalive-interval: 0
 #       X-Custom-Header: "custom-value"
 #     proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
 #     # proxy-url: "direct" # optional: explicit direct connect for this credential
+#     limits:
+#       per-minute: 90
+#       per-day: 3000
+#       concurrent: 6
 #     models:
 #       - name: "claude-3-5-sonnet-20241022" # upstream model name
 #         alias: "claude-sonnet-latest"      # client alias mapped to the upstream model
@@ -207,6 +245,10 @@ nonstream-keepalive-interval: 0
 #       - api-key: "sk-or-v1-...b780"
 #         proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
 #         # proxy-url: "direct" # optional: explicit direct connect for this credential
+#         limits:
+#           per-minute: 300
+#           per-day: 10000
+#           concurrent: 16
 #       - api-key: "sk-or-v1-...b781" # without proxy-url
 #     models: # The models supported by the provider.
 #       - name: "moonshotai/kimi-k2:free" # The actual model name.
@@ -232,6 +274,10 @@ nonstream-keepalive-interval: 0
 #     base-url: "https://example.com/api"         # optional, e.g. https://zenmux.ai/api; falls back to Google Vertex when omitted
 #     proxy-url: "socks5://proxy.example.com:1080" # optional per-key proxy override
 #     # proxy-url: "direct" # optional: explicit direct connect for this credential
+#     limits:
+#       per-minute: 120
+#       per-day: 4000
+#       concurrent: 8
 #     headers:
 #       X-Custom-Header: "custom-value"
 #     models:                                     # optional: map aliases to upstream model names

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/requestctx"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
@@ -114,6 +116,19 @@ type Hook interface {
 	OnResult(ctx context.Context, result Result)
 }
 
+// QuotaReservation represents one auth quota reservation for the duration of a request.
+type QuotaReservation interface {
+	Allowed() bool
+	Reason() string
+	RetryAfter() time.Duration
+	Release(ctx context.Context)
+}
+
+// QuotaLimiter allows the manager to enforce distributed quotas before execution.
+type QuotaLimiter interface {
+	Reserve(ctx context.Context, auth *Auth) (QuotaReservation, error)
+}
+
 // NoopHook provides optional hook defaults.
 type NoopHook struct{}
 
@@ -159,6 +174,9 @@ type Manager struct {
 
 	// Optional HTTP RoundTripper provider injected by host.
 	rtProvider RoundTripperProvider
+
+	// Optional distributed quota limiter injected by host.
+	quotaLimiter QuotaLimiter
 
 	// Auto refresh state
 	refreshCancel    context.CancelFunc
@@ -260,6 +278,13 @@ func (m *Manager) SetStore(store Store) {
 func (m *Manager) SetRoundTripperProvider(p RoundTripperProvider) {
 	m.mu.Lock()
 	m.rtProvider = p
+	m.mu.Unlock()
+}
+
+// SetQuotaLimiter registers a distributed quota limiter for auth-backed requests.
+func (m *Manager) SetQuotaLimiter(limiter QuotaLimiter) {
+	m.mu.Lock()
+	m.quotaLimiter = limiter
 	m.mu.Unlock()
 }
 
@@ -1095,13 +1120,22 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 
 		tried[auth.ID] = struct{}{}
 		execCtx := ctx
+		execCtx = requestctx.WithMetadata(execCtx, opts.Metadata)
 		if rt := m.roundTripperFor(auth); rt != nil {
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
+		reservation, denyErr := m.reserveQuota(execCtx, auth)
+		if denyErr != nil {
+			lastErr = denyErr
+			continue
+		}
 
 		models, pooled := m.preparedExecutionModels(auth, routeModel)
 		if len(models) == 0 {
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
@@ -1113,6 +1147,9 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			resp, errExec := executor.Execute(execCtx, auth, execReq, opts)
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: errExec == nil}
 			if errExec != nil {
+				if reservation != nil {
+					reservation.Release(execCtx)
+				}
 				if errCtx := execCtx.Err(); errCtx != nil {
 					return cliproxyexecutor.Response{}, errCtx
 				}
@@ -1131,6 +1168,9 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			return resp, nil
 		}
 		if authErr != nil {
@@ -1173,13 +1213,22 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 
 		tried[auth.ID] = struct{}{}
 		execCtx := ctx
+		execCtx = requestctx.WithMetadata(execCtx, opts.Metadata)
 		if rt := m.roundTripperFor(auth); rt != nil {
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
+		reservation, denyErr := m.reserveQuota(execCtx, auth)
+		if denyErr != nil {
+			lastErr = denyErr
+			continue
+		}
 
 		models, pooled := m.preparedExecutionModels(auth, routeModel)
 		if len(models) == 0 {
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
@@ -1191,6 +1240,9 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			resp, errExec := executor.CountTokens(execCtx, auth, execReq, opts)
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: errExec == nil}
 			if errExec != nil {
+				if reservation != nil {
+					reservation.Release(execCtx)
+				}
 				if errCtx := execCtx.Err(); errCtx != nil {
 					return cliproxyexecutor.Response{}, errCtx
 				}
@@ -1209,6 +1261,9 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			return resp, nil
 		}
 		if authErr != nil {
@@ -1259,17 +1314,29 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 
 		tried[auth.ID] = struct{}{}
 		execCtx := ctx
+		execCtx = requestctx.WithMetadata(execCtx, opts.Metadata)
 		if rt := m.roundTripperFor(auth); rt != nil {
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
+		reservation, denyErr := m.reserveQuota(execCtx, auth)
+		if denyErr != nil {
+			lastErr = denyErr
+			continue
+		}
 		models, pooled := m.preparedExecutionModels(auth, routeModel)
 		if len(models) == 0 {
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
 		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, req, opts, routeModel, models, pooled)
 		if errStream != nil {
+			if reservation != nil {
+				reservation.Release(execCtx)
+			}
 			if errCtx := execCtx.Err(); errCtx != nil {
 				return nil, errCtx
 			}
@@ -1278,6 +1345,9 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			}
 			lastErr = errStream
 			continue
+		}
+		if reservation != nil {
+			streamResult = wrapStreamResultWithQuotaReservation(streamResult, reservation, execCtx)
 		}
 		return streamResult, nil
 	}
@@ -1302,6 +1372,89 @@ func ensureRequestedModelMetadata(opts cliproxyexecutor.Options, requestedModel 
 	meta[cliproxyexecutor.RequestedModelMetadataKey] = requestedModel
 	opts.Metadata = meta
 	return opts
+}
+
+type quotaLimitError struct {
+	reason     string
+	retryAfter time.Duration
+}
+
+func (e *quotaLimitError) Error() string {
+	if e == nil {
+		return "quota exceeded"
+	}
+	reason := strings.TrimSpace(e.reason)
+	if reason == "" {
+		reason = "quota"
+	}
+	return fmt.Sprintf(`{"error":{"code":"rate_limit_exceeded","message":"auth quota exceeded: %s"}}`, reason)
+}
+
+func (e *quotaLimitError) StatusCode() int {
+	return http.StatusTooManyRequests
+}
+
+func (e *quotaLimitError) Headers() http.Header {
+	header := make(http.Header)
+	if e == nil {
+		return header
+	}
+	retryAfter := int(e.retryAfter.Seconds())
+	if retryAfter < 0 {
+		retryAfter = 0
+	}
+	header.Set("Retry-After", strconv.Itoa(retryAfter))
+	return header
+}
+
+func (m *Manager) reserveQuota(ctx context.Context, auth *Auth) (QuotaReservation, error) {
+	if m == nil || auth == nil {
+		return nil, nil
+	}
+	m.mu.RLock()
+	limiter := m.quotaLimiter
+	m.mu.RUnlock()
+	if limiter == nil {
+		return nil, nil
+	}
+	reservation, err := limiter.Reserve(ctx, auth)
+	if err != nil {
+		return nil, err
+	}
+	if reservation == nil || reservation.Allowed() {
+		return reservation, nil
+	}
+	return reservation, &quotaLimitError{
+		reason:     reservation.Reason(),
+		retryAfter: reservation.RetryAfter(),
+	}
+}
+
+func wrapStreamResultWithQuotaReservation(streamResult *cliproxyexecutor.StreamResult, reservation QuotaReservation, ctx context.Context) *cliproxyexecutor.StreamResult {
+	if streamResult == nil || reservation == nil {
+		return streamResult
+	}
+	chunks := make(chan cliproxyexecutor.StreamChunk)
+	go func() {
+		defer close(chunks)
+		defer reservation.Release(ctx)
+		for chunk := range streamResult.Chunks {
+			if ctx == nil {
+				chunks <- chunk
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				discardStreamChunks(streamResult.Chunks)
+				return
+			case chunks <- chunk:
+			}
+		}
+	}()
+	return &cliproxyexecutor.StreamResult{
+		Headers: streamResult.Headers,
+		Chunks:  chunks,
+	}
 }
 
 func hasRequestedModelMetadata(meta map[string]any) bool {
@@ -1816,6 +1969,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 	m.mu.Unlock()
 	if m.scheduler != nil && authSnapshot != nil {
 		m.scheduler.upsertAuth(authSnapshot)
+	}
+	if authSnapshot != nil {
+		m.hook.OnAuthUpdated(ctx, authSnapshot.Clone())
 	}
 
 	if clearModelQuota && result.Model != "" {

@@ -16,8 +16,23 @@ builds:
     binary: cli-proxy-api
     ldflags:
       - -s -w -X 'main.Version={{.Version}}' -X 'main.Commit={{.ShortCommit}}' -X 'main.BuildDate={{.Date}}'
+  - id: "cli-proxy-gateway"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/gateway/
+    binary: cli-proxy-gateway
 archives:
   - id: "cli-proxy-api"
+    ids:
+      - cli-proxy-api
     format: tar.gz
     format_overrides:
       - goos: windows
@@ -27,6 +42,18 @@ archives:
       - README.md
       - README_CN.md
       - config.example.yaml
+  - id: "cli-proxy-gateway"
+    ids:
+      - cli-proxy-gateway
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - README_CN.md
+      - gateway.example.yaml
 
 checksum:
   name_template: 'checksums.txt'

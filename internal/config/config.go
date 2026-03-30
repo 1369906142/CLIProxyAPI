@@ -27,6 +27,13 @@ const (
 // Config represents the application's configuration, loaded from a YAML file.
 type Config struct {
 	SDKConfig `yaml:",inline"`
+	// Redis config backs shared distributed state such as gateway rate limits,
+	// auth quotas, and proxy health information.
+	Redis RedisConfig `yaml:"redis" json:"redis"`
+
+	// Transport config controls advanced outbound transport behavior such as proxy pools.
+	Transport TransportConfig `yaml:"transport" json:"transport"`
+
 	// Host is the network host/interface on which the API server will bind.
 	// Default is empty ("") to bind all interfaces (IPv4 + IPv6). Use "127.0.0.1" or "localhost" for local-only access.
 	Host string `yaml:"host" json:"-"`
@@ -142,6 +149,38 @@ type ClaudeHeaderDefaults struct {
 	Arch                   string `yaml:"arch" json:"arch"`
 	Timeout                string `yaml:"timeout" json:"timeout"`
 	StabilizeDeviceProfile *bool  `yaml:"stabilize-device-profile,omitempty" json:"stabilize-device-profile,omitempty"`
+}
+
+// RedisConfig defines the Redis connection used for distributed runtime state.
+type RedisConfig struct {
+	Addr      string `yaml:"addr" json:"addr"`
+	Password  string `yaml:"password,omitempty" json:"password,omitempty"`
+	DB        int    `yaml:"db,omitempty" json:"db,omitempty"`
+	KeyPrefix string `yaml:"key-prefix,omitempty" json:"key-prefix,omitempty"`
+}
+
+// TransportConfig configures advanced outbound networking features.
+type TransportConfig struct {
+	ProxyPools []ProxyPoolConfig `yaml:"proxy-pools,omitempty" json:"proxy-pools,omitempty"`
+}
+
+// ProxyPoolConfig defines one proxy pool entry. Multiple entries may share the same id.
+// A single entry may describe one proxy via URL or multiple proxies via URLs.
+type ProxyPoolConfig struct {
+	ID              string   `yaml:"id" json:"id"`
+	URL             string   `yaml:"url,omitempty" json:"url,omitempty"`
+	URLs            []string `yaml:"urls,omitempty" json:"urls,omitempty"`
+	Weight          int      `yaml:"weight,omitempty" json:"weight,omitempty"`
+	MaxFailures     int      `yaml:"max-failures,omitempty" json:"max-failures,omitempty"`
+	CooldownSeconds int      `yaml:"cooldown-seconds,omitempty" json:"cooldown-seconds,omitempty"`
+	Mode            string   `yaml:"mode,omitempty" json:"mode,omitempty"`
+}
+
+// KeyQuotaConfig configures runtime quota enforcement for one credential.
+type KeyQuotaConfig struct {
+	PerMinute  int `yaml:"per-minute,omitempty" json:"per-minute,omitempty"`
+	PerDay     int `yaml:"per-day,omitempty" json:"per-day,omitempty"`
+	Concurrent int `yaml:"concurrent,omitempty" json:"concurrent,omitempty"`
 }
 
 // CodexHeaderDefaults configures fallback header values injected into Codex
@@ -358,6 +397,9 @@ type ClaudeKey struct {
 	// Headers optionally adds extra HTTP headers for requests sent with this key.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 
+	// Limits configures shared Redis-backed quotas for this credential.
+	Limits KeyQuotaConfig `yaml:"limits,omitempty" json:"limits,omitempty"`
+
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 
@@ -409,6 +451,9 @@ type CodexKey struct {
 	// Headers optionally adds extra HTTP headers for requests sent with this key.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 
+	// Limits configures shared Redis-backed quotas for this credential.
+	Limits KeyQuotaConfig `yaml:"limits,omitempty" json:"limits,omitempty"`
+
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 }
@@ -452,6 +497,9 @@ type GeminiKey struct {
 
 	// Headers optionally adds extra HTTP headers for requests sent with this key.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// Limits configures shared Redis-backed quotas for this credential.
+	Limits KeyQuotaConfig `yaml:"limits,omitempty" json:"limits,omitempty"`
 
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
@@ -505,6 +553,9 @@ type OpenAICompatibilityAPIKey struct {
 
 	// ProxyURL overrides the global proxy setting for this API key if provided.
 	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+
+	// Limits configures shared Redis-backed quotas for this credential.
+	Limits KeyQuotaConfig `yaml:"limits,omitempty" json:"limits,omitempty"`
 }
 
 // OpenAICompatibilityModel represents a model configuration for OpenAI compatibility,

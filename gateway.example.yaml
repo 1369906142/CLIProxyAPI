@@ -1,0 +1,35 @@
+listen: ":8320"
+
+backend:
+  url: "http://127.0.0.1:8315"
+  internal-api-key: "replace-with-internal-backend-key"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  key-prefix: "cpa"
+
+timeouts:
+  connect-ms: 5000
+  response-header-ms: 30000
+  total-ms: 120000
+  stream-idle-ms: 45000
+
+tenants:
+  - id: "tenant-a"
+    api-key: "tenant-a-secret"
+    qps: 5
+    burst: 10
+    timeout-ms: 90000
+    proxy-pool: "residential-us"
+    retry:
+      max-attempts: 3
+  - id: "tenant-b"
+    api-key: "tenant-b-secret"
+    qps: 2
+    burst: 4
+    timeout-ms: 60000
+    proxy-pool: "direct"
+    retry:
+      max-attempts: 2

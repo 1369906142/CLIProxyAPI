@@ -32,6 +32,9 @@ type VertexCompatKey struct {
 	// Commonly used for cookies, user-agent, and other authentication headers.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 
+	// Limits configures shared Redis-backed quotas for this credential.
+	Limits KeyQuotaConfig `yaml:"limits,omitempty" json:"limits,omitempty"`
+
 	// Models defines the model configurations including aliases for routing.
 	Models []VertexCompatModel `yaml:"models,omitempty" json:"models,omitempty"`
 

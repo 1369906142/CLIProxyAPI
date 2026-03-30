@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"sort"
 	"strings"
 
@@ -116,5 +117,20 @@ func addConfigHeadersToAttrs(headers map[string]string, attrs map[string]string)
 			continue
 		}
 		attrs["header:"+key] = val
+	}
+}
+
+func addQuotaLimitsToAttrs(limits config.KeyQuotaConfig, attrs map[string]string) {
+	if attrs == nil {
+		return
+	}
+	if limits.PerMinute > 0 {
+		attrs["quota_per_minute"] = strconv.Itoa(limits.PerMinute)
+	}
+	if limits.PerDay > 0 {
+		attrs["quota_per_day"] = strconv.Itoa(limits.PerDay)
+	}
+	if limits.Concurrent > 0 {
+		attrs["quota_concurrent"] = strconv.Itoa(limits.Concurrent)
 	}
 }

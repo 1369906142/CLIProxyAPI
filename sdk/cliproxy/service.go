@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/cliproxystate"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/redisstate"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/runtime/executor"
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
@@ -83,6 +85,9 @@ type Service struct {
 
 	// coreManager handles core authentication and execution.
 	coreManager *coreauth.Manager
+
+	// stateStore holds the optional Redis-backed distributed state backend.
+	stateStore *redisstate.Store
 
 	// shutdownOnce ensures shutdown is called only once.
 	shutdownOnce sync.Once
@@ -483,6 +488,10 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	usage.StartDefault(ctx)
+	if s.stateStore != nil {
+		usage.RegisterPlugin(cliproxystate.NewUsagePlugin(s.stateStore))
+	}
+	executor.ConfigureTransportRuntime(s.cfg, s.stateStore)
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
@@ -762,6 +771,12 @@ func (s *Service) Shutdown(ctx context.Context) error {
 				if shutdownErr == nil {
 					shutdownErr = err
 				}
+			}
+		}
+
+		if s.stateStore != nil {
+			if err := s.stateStore.Close(); err != nil && shutdownErr == nil {
+				shutdownErr = err
 			}
 		}
 

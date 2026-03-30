@@ -8,14 +8,14 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	"github.com/router-for-me/CLIProxyAPI/v6/sdk/proxyutil"
 	log "github.com/sirupsen/logrus"
 )
 
 // newProxyAwareHTTPClient creates an HTTP client with proper proxy configuration priority:
-// 1. Use auth.ProxyURL if configured (highest priority)
-// 2. Use cfg.ProxyURL if auth proxy is not configured
-// 3. Use RoundTripper from context if neither are configured
+// 1. Use request metadata selected proxy pool when configured.
+// 2. Use auth.ProxyURL when no request-level pool is selected.
+// 3. Use cfg.ProxyURL when the auth does not override the proxy.
+// 4. Use RoundTripper from context when no proxy configuration applies.
 //
 // Parameters:
 //   - ctx: The context containing optional RoundTripper
@@ -31,18 +31,34 @@ func newProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 		httpClient.Timeout = timeout
 	}
 
-	// Priority 1: Use auth.ProxyURL if configured
+	// Priority 1: Use request-level proxy pool when configured.
+	if candidate, ok := selectProxyCandidate(ctx, cfg); ok {
+		if transport := buildProxyTransport(candidate.URL); transport != nil {
+			if store := currentTransportStore(); store != nil {
+				httpClient.Transport = &proxyHealthRoundTripper{
+					base:      transport,
+					store:     store,
+					candidate: candidate,
+				}
+			} else {
+				httpClient.Transport = transport
+			}
+			return httpClient
+		}
+	}
+
+	// Priority 2: Use auth.ProxyURL if configured
 	var proxyURL string
 	if auth != nil {
 		proxyURL = strings.TrimSpace(auth.ProxyURL)
 	}
 
-	// Priority 2: Use cfg.ProxyURL if auth proxy is not configured
+	// Priority 3: Use cfg.ProxyURL if auth proxy is not configured
 	if proxyURL == "" && cfg != nil {
 		proxyURL = strings.TrimSpace(cfg.ProxyURL)
 	}
 
-	// If we have a proxy URL configured, set up the transport
+	// If we have a proxy URL configured, set up the transport.
 	if proxyURL != "" {
 		transport := buildProxyTransport(proxyURL)
 		if transport != nil {
@@ -53,11 +69,13 @@ func newProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 		log.Debugf("failed to setup proxy from URL: %s, falling back to context transport", proxyURL)
 	}
 
-	// Priority 3: Use RoundTripper from context (typically from RoundTripperFor)
+	// Priority 4: Use RoundTripper from context (typically from RoundTripperFor)
 	if rt, ok := ctx.Value("cliproxy.roundtripper").(http.RoundTripper); ok && rt != nil {
 		httpClient.Transport = rt
+		return httpClient
 	}
 
+	httpClient.Transport = transportForProxy("")
 	return httpClient
 }
 
@@ -70,10 +88,5 @@ func newProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 // Returns:
 //   - *http.Transport: A configured transport, or nil if the proxy URL is invalid
 func buildProxyTransport(proxyURL string) *http.Transport {
-	transport, _, errBuild := proxyutil.BuildHTTPTransport(proxyURL)
-	if errBuild != nil {
-		log.Errorf("%v", errBuild)
-		return nil
-	}
-	return transport
+	return transportForProxy(proxyURL)
 }
