@@ -33,6 +33,7 @@ archives:
   - id: "cli-proxy-api"
     ids:
       - cli-proxy-api
+    name_template: "CLIProxyAPI_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     format_overrides:
       - goos: windows
@@ -45,6 +46,7 @@ archives:
   - id: "cli-proxy-gateway"
     ids:
       - cli-proxy-gateway
+    name_template: "CLIProxyAPI_gateway_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     format_overrides:
       - goos: windows
